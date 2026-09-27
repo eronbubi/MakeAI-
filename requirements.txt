@@ -1,0 +1,24 @@
+# MakeAI runtime dependencies (Python 3.10+).
+# PyTorch is installed separately so the right CUDA/ROCm build can be chosen:
+#   https://pytorch.org/get-started/locally/   (tested: torch 2.3.1+cu121)
+numpy==1.26.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+psutil>=5.9
+nvidia-ml-py>=12.535
+tokenizers>=0.19
+sentencepiece>=0.2
+safetensors>=0.4
+pyarrow>=14
+pandas>=2.0
+jinja2>=3.1
+gguf>=0.10
+onnx==1.16.2
+ml-dtypes==0.4.1
+onnxruntime==1.19.2
+# Optional: QLoRA, INT8/INT4/NF4/FP4 and AdamW 8-bit (CUDA only)
+bitsandbytes==0.44.1
+# Tests
+pytest>=8
+httpx>=0.27

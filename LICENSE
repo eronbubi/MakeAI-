@@ -1,0 +1,43 @@
+MakeAI License
+Copyright (c) 2026 Eron (@eronbubi) / Convergent. All rights reserved.
+
+This license applies to the MakeAI software in this repository: its source code, user interface, documentation
+and assets (the "Software").
+
+1. Permitted use
+   You may download, install and run the Software, for private or commercial purposes, free of charge.
+
+2. Your AI models
+   AI models, datasets, tokenizers, checkpoints and other results that you create, train or fine-tune with the
+   Software ("Your Output") belong to you. You may use, share, publish, sell and advertise Your Output, including
+   through MakeAI's own sharing features. The creator attribution that MakeAI stores in Your Output's metadata
+   ("Created by" / "Originally created by") must not be removed or falsified.
+
+3. Promotion
+   You may name, recommend, review, show, screenshot, stream and advertise the Software, provided that you name
+   it "MakeAI by Convergent" and link to or name this repository as its source.
+
+4. Restrictions
+   You may NOT, without prior written permission from the copyright holder:
+   a) modify, adapt, translate or create derivative works of the Software, in whole or in part;
+   b) republish, redistribute, mirror, sublicense, sell, rent or otherwise make the Software or any modified
+      version of it available to others, whether as source code or in compiled or packaged form;
+   c) remove or alter this license, copyright notices, or the "MakeAI by Convergent" branding;
+   d) present the Software, or a product based on it, as your own work.
+   Sharing a link to this repository is always allowed.
+
+5. Third-party components
+   Third-party libraries used by the Software (for example PyTorch, React, FastAPI, llama.cpp, bitsandbytes) remain
+   under their own licenses. Model weights that you import into MakeAI remain under the licenses of their
+   original authors.
+
+6. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
+   THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SOFTWARE OR ITS USE, INCLUDING DAMAGE TO HARDWARE OR LOSS OF DATA DURING TRAINING.
+
+7. Termination
+   Any use that breaks these terms ends your permission to use the Software.
+
+For permission beyond this license, contact the copyright holder through https://github.com/eronbubi.
