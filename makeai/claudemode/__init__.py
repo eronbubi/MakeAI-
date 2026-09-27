@@ -1,13 +1,14 @@
-"""Claude Mode - Claude works in MakeAI, the user watches.
+"""Claude Mode - a coding agent works in MakeAI, the user watches.
 
-The user talks to Claude in the Claude Code app. Claude reaches MakeAI through
-the MCP server in ``mcp_server.py`` (normal MakeAI API, requests marked
-``X-MakeAI-Agent: claude``). This module keeps what the watch-only Claude Mode
-view shows:
+The user talks to the agent in its own app (Claude Code, Codex, Cursor, Zed, ...).
+The agent reaches MakeAI through the MCP server in ``mcp_server.py`` (normal
+MakeAI API, requests marked ``X-MakeAI-Agent: <agent>``); ``agents.py`` writes the
+MCP config for each supported agent. This module keeps what the watch-only view
+shows:
 
-* the session (goal, connected / last seen),
-* an activity list (what Claude did, plus checkpoints and training results),
-* the "focus" - the thing Claude is working on (for example a training run).
+* the session (which agent, goal, connected / last seen),
+* an activity list (what the agent did, plus checkpoints and training results),
+* the "focus" - the thing the agent is working on (for example a training run).
 
 Like ``makeai.devagent`` this package is optional: the runtime never needs it,
 and deleting it only hides Claude Mode.
@@ -15,9 +16,6 @@ and deleting it only hides Claude Mode.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -26,19 +24,13 @@ from typing import Any, Callable
 from fastapi import Body, HTTPException, Request
 
 from .. import store
+from . import agents
+from .agents import MCP_SCRIPT, console_python  # noqa: F401  (re-exported)
 
-MCP_SCRIPT = Path(__file__).resolve().parent / "mcp_server.py"
 
+CONNECTED_WINDOW_S = 90          # the agent counts as connected if it called within this window
 
-def console_python() -> str:
-    """The MCP server talks over stdin/stdout, so it must run with python.exe, not pythonw.exe."""
-    exe = Path(sys.executable)
-    if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").exists():
-        return str(exe.with_name("python.exe"))
-    return str(exe)
-CONNECTED_WINDOW_S = 90          # Claude counts as connected if it called within this window
-
-PROMPT_TEMPLATE = """Work inside MakeAI for me using the "makeai" tools. I watch what you do live in MakeAI's Claude Mode.
+PROMPT_TEMPLATE = """Work inside MakeAI for me using the "makeai" tools. I watch what you do live in MakeAI.
 
 Goal: {goal}
 
@@ -60,6 +52,7 @@ class ClaudeLink:
         self.events: list[dict[str, Any]] = []
         self.focus: dict[str, Any] | None = self.session.get("focus")
         self.last_seen = 0.0
+        self.agents_seen: dict[str, Any] = store.read_json(self.dir / "agents_seen.json", {}) or {}
         self.ui_seen = 0.0
         self._next = 1
         self._run_states: dict[str, str] = {}
@@ -115,12 +108,27 @@ class ClaudeLink:
     def seen(self) -> None:
         self.last_seen = time.time()
 
-    def start(self, goal: str) -> dict[str, Any]:
+    @property
+    def agent_name(self) -> str:
+        return (self.session.get("agent") or {}).get("name") or "Claude"
+
+    def hello(self, agent: dict | None) -> dict[str, Any]:
+        """An agent loaded the MakeAI tools (MCP initialize)."""
+        a = agent or {}
+        aid = str(a.get("id") or "agent")[:32]
+        self.agents_seen[aid] = {"name": str(a.get("name") or aid)[:40], "client": a.get("client"), "t": time.time()}
+        store.write_json(self.dir / "agents_seen.json", self.agents_seen)
+        return {"ok": True}
+
+    def start(self, goal: str, agent: dict | None = None) -> dict[str, Any]:
         self.seen()
-        self.session = {"active": True, "goal": goal, "started_at": time.time(), "runs": [], "focus": None}
+        a = agent or {"id": "claude", "name": "Claude"}
+        self.session = {"active": True, "goal": goal, "started_at": time.time(), "runs": [], "focus": None,
+                        "agent": {"id": str(a.get("id") or "agent")[:32], "name": str(a.get("name") or "Agent")[:40]}}
+        self.hello(a)
         self.focus = None
         self._save_session()
-        self.add("system", "Claude started working" + (f": {goal}" if goal else ""), icon="spark")
+        self.add("system", f"{self.agent_name} started working" + (f": {goal}" if goal else ""), icon="spark")
         return {**self.session, "ui_open": time.time() - self.ui_seen < 5}
 
     def end(self, summary: str) -> dict[str, Any]:
@@ -128,7 +136,7 @@ class ClaudeLink:
         self.session["active"] = False
         self.session["ended_at"] = time.time()
         self._save_session()
-        self.add("system", "Claude finished" + (f": {summary}" if summary else ""), icon="done")
+        self.add("system", f"{self.agent_name} finished" + (f": {summary}" if summary else ""), icon="done")
         return self.session
 
     def set_focus(self, view: str, ref: str | None, title: str | None) -> None:
@@ -196,44 +204,30 @@ class ClaudeLink:
         self.ui_seen = time.time()
         with self.cond:
             self.poll_runs()
-        return {"session": self.session, "connected": self.connected, "last_seen": self.last_seen or None,
+        return {"session": self.session, "agent": self.session.get("agent") or {"id": "claude", "name": "Claude"},
+                "connected": self.connected, "last_seen": self.last_seen or None,
                 "focus": self.focus, "events": [e for e in self.events if e["id"] > since][-400:]}
 
 
 # ---------------------------------------------------------------------- setup
-def claude_cli() -> str | None:
-    return shutil.which("claude")
+def agent_list(base_url: str, seen: dict[str, Any]) -> list[dict[str, Any]]:
+    out = []
+    for a in agents.AGENTS:
+        info = a.info(base_url)
+        info["last_seen"] = (seen.get(a.id) or {}).get("t")
+        out.append(info)
+    return out
 
 
 def setup_info(base_url: str) -> dict[str, Any]:
-    cmd = ["claude", "mcp", "add", "--scope", "user", "makeai", "-e", f"MAKEAI_URL={base_url}", "--",
-           console_python(), str(MCP_SCRIPT)]
-    registered = None
-    cli = claude_cli()
-    if cli:
-        try:
-            p = subprocess.run([cli, "mcp", "get", "makeai"], capture_output=True, text=True, timeout=30,
-                               encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            norm = lambda x: x.replace("\\", "/").lower()
-            registered = p.returncode == 0 and norm(str(MCP_SCRIPT)) in norm(p.stdout)
-        except Exception:
-            registered = None
-    return {"cli": cli, "registered": registered, "prompt_template": PROMPT_TEMPLATE,
-            "add_command": " ".join(f'"{c}"' if " " in c else c for c in cmd)}
+    """Kept for the Claude Code link (older UI / tests)."""
+    c = agents.get("claude")
+    return {"cli": agents._which("claude"), "registered": c.configured() if c.installed() else None,
+            "prompt_template": PROMPT_TEMPLATE, "add_command": c.snippet(base_url)}
 
 
 def register(base_url: str) -> dict[str, Any]:
-    cli = claude_cli()
-    if not cli:
-        raise RuntimeError("Claude Code is not installed on this computer")
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    subprocess.run([cli, "mcp", "remove", "--scope", "user", "makeai"], capture_output=True, text=True, timeout=60,
-                   creationflags=flags)
-    p = subprocess.run([cli, "mcp", "add", "--scope", "user", "makeai", "-e", f"MAKEAI_URL={base_url}", "--",
-                        console_python(), str(MCP_SCRIPT)], capture_output=True, text=True, timeout=60,
-                       encoding="utf-8", errors="replace", creationflags=flags)
-    if p.returncode != 0:
-        raise RuntimeError((p.stderr or p.stdout).strip()[-500:])
+    agents.get("claude").connect(base_url)
     return {"ok": True}
 
 
@@ -253,7 +247,11 @@ def install(app, S, list_runs, read_status) -> ClaudeLink:
     def claude_session(body: dict = Body(...)):
         if body.get("action") == "end":
             return link.end(body.get("summary", ""))
-        return link.start(body.get("goal", ""))
+        return link.start(body.get("goal", ""), body.get("agent"))
+
+    @app.post("/api/claude/hello")
+    def claude_hello(body: dict = Body(...)):
+        return link.hello(body.get("agent"))
 
     @app.post("/api/claude/event")
     def claude_event(body: dict = Body(...)):
@@ -286,6 +284,30 @@ def install(app, S, list_runs, read_status) -> ClaudeLink:
     @app.get("/api/claude/setup")
     def claude_setup(request: Request):
         return setup_info(base(request))
+
+    @app.get("/api/claude/agents")
+    def claude_agents(request: Request):
+        return {"agents": agent_list(base(request), link.agents_seen), "prompt_template": PROMPT_TEMPLATE}
+
+    @app.post("/api/claude/agents/{agent_id}/connect")
+    def claude_agent_connect(agent_id: str, request: Request):
+        try:
+            a = agents.get(agent_id)
+            where = a.connect(base(request))
+            return {"ok": True, "where": where, "restart": a.restart, "configured": a.configured()}
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/claude/agents/{agent_id}/disconnect")
+    def claude_agent_disconnect(agent_id: str):
+        try:
+            return {"ok": True, "changed": agents.get(agent_id).disconnect()}
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(400, str(e))
 
     @app.post("/api/claude/register")
     def claude_register(request: Request):

@@ -285,4 +285,13 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px sol
 .cm-right .page { padding: 0; max-width: none; }
 .cm-idle { height: 100%; display: grid; place-items: center; text-align: center; color: var(--dim); }
 .cm-idle h2 { color: var(--text); font-size: 20px; margin: 10px 0 6px; }
+.agent-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.agent-row + .agent-row { border-top: 1px solid var(--line); }
+.agent-row.off .agent-name { color: var(--dim); }
+.agent-main { display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-height: 46px; flex-wrap: wrap; }
+.agent-name { font-weight: 600; min-width: 110px; }
+.agent-state { font-size: 12.5px; color: var(--dim); }
+.agent-state.ok { color: var(--ok-text); }
+.agent-main .sp { flex: 1; }
+.agent-manual { padding: 0 12px 12px; }
 .cm-pre { background: var(--bg2); border-radius: 10px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; font-size: 12.5px; }

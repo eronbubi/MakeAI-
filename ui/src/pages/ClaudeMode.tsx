@@ -5,7 +5,8 @@ import { useApp } from "../store";
 
 type Ev = { id: number; t: number; kind: "system" | "say" | "action" | "event"; text: string; icon?: string; status?: string; detail?: string };
 
-/** Claude Mode: Claude works in MakeAI, you only watch. You talk to Claude in the Claude Code app. */
+/** Claude Mode: a coding agent (Claude Code, Codex, Cursor, ...) works in MakeAI, you only watch.
+ *  You talk to the agent in its own app. */
 export default function ClaudeMode({ onExit }: { pages?: unknown; onExit: () => void }) {
   const [events, setEvents] = useState<Ev[]>([]);
   const [state, setState] = useState<any>(null);
@@ -41,35 +42,36 @@ export default function ClaudeMode({ onExit }: { pages?: unknown; onExit: () => 
   const shown = events.filter((e) => e.t >= start - 1 && !(e.kind === "action" && e.status === "running"));
   const focus = state?.focus;
   const connected = state?.connected;
+  const agent: string = state?.agent?.name || "Claude";
 
   return (
     <div className="cm">
-      <aside className="cm-left" aria-label="Claude activity">
+      <aside className="cm-left" aria-label={`${agent} activity`}>
         <div className="cm-left-head">
-          <Icon n="spark" s={22} c="var(--acc)" /><h2>Claude activity</h2>
+          <Icon n="spark" s={22} c="var(--acc)" /><h2>{agent} activity</h2>
           <span className="cm-lock"><Icon n="lock" s={13} />VIEW ONLY</span>
         </div>
         <div className="cm-list" ref={listRef}>
           {!shown.length && (
             <div className="cm-item say">
-              <span className="tx">No activity yet. Ask Claude in the Claude Code app to work in MakeAI - its steps appear here.</span>
+              <span className="tx">No activity yet. Ask your agent (Claude Code, Codex, Cursor, …) in its own app to work in MakeAI - its steps appear here.</span>
             </div>
           )}
           {shown.map((e, i) => <Item key={e.id} e={e} latest={i === shown.length - 1} />)}
         </div>
         <div className="cm-foot">
           <span className={`dot ${connected ? "run" : ""}`} />
-          {state?.session?.active ? (connected ? "Claude is working" : "Claude is thinking") : connected ? "Claude finished" : "Claude is not connected"}
+          {state?.session?.active ? (connected ? `${agent} is working` : `${agent} is thinking`) : connected ? `${agent} finished` : "No agent connected"}
           <span className="sp" />
           <button className="btn ghost sm" onClick={() => setHelp(true)}>How to connect</button>
           <button className="btn sm" onClick={onExit}>Exit</button>
         </div>
       </aside>
-      <section className="cm-right" aria-label="What Claude is working on" {...({ inert: "" } as any)}>
+      <section className="cm-right" aria-label={`What ${agent} is working on`} {...({ inert: "" } as any)}>
         {focus?.view === "run" && focus.id ? <RunView runId={focus.id} />
           : focus?.view === "ai" && focus.id ? <AiView uid={focus.id} />
           : focus?.view === "dataset" && focus.id ? <DatasetView id={focus.id} />
-          : <Idle connected={connected} goal={state?.session?.active ? state?.session?.goal : null} />}
+          : <Idle agent={agent} connected={connected} goal={state?.session?.active ? state?.session?.goal : null} />}
       </section>
       {help && <ConnectDialog onClose={() => setHelp(false)} />}
     </div>
@@ -87,13 +89,13 @@ function Item({ e, latest }: { e: Ev; latest: boolean }) {
   );
 }
 
-function Idle({ connected, goal }: { connected: boolean; goal?: string | null }) {
+function Idle({ agent, connected, goal }: { agent: string; connected: boolean; goal?: string | null }) {
   return (
     <div className="cm-idle">
       <div style={{ maxWidth: 440 }}>
         <Icon n="spark" s={40} c="var(--acc)" />
-        <h2>{goal ? "Claude is getting started" : connected ? "Claude is connected" : "Waiting for Claude"}</h2>
-        <div>{goal ? goal : "When Claude creates or trains an AI, you see it here live - progress, loss curve, GPU and temperature."}</div>
+        <h2>{goal ? `${agent} is getting started` : connected ? `${agent} is connected` : "Waiting for an agent"}</h2>
+        <div>{goal ? goal : "When your agent creates or trains an AI, you see it here live - progress, loss curve, GPU and temperature."}</div>
       </div>
     </div>
   );
@@ -216,37 +218,72 @@ function DatasetView({ id }: { id: string }) {
   );
 }
 
+type AgentInfo = { id: string; name: string; installed: boolean; configured: boolean; config_path: string | null;
+  restart: string; snippet: string; docs: string; kind: string; last_seen: number | null };
+
 function ConnectDialog({ onClose }: { onClose: () => void }) {
   const { toast } = useApp();
-  const [setup, setSetup] = useState<any>(null);
+  const [data, setData] = useState<{ agents: AgentInfo[]; prompt_template: string } | null>(null);
   const [goal, setGoal] = useState("Train a small code model on my Python dataset and show me how good it gets.");
-  const [busy, setBusy] = useState(false);
-  const load = () => api.get("/api/claude/setup").then(setSetup).catch((e) => toast(e.message, true));
+  const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const load = () => api.get("/api/claude/agents").then(setData).catch((e) => toast(e.message, true));
   useEffect(() => { load(); }, []); // eslint-disable-line
-  const prompt = (setup?.prompt_template || "").replace("{goal}", goal || "(ask me)");
+  const prompt = (data?.prompt_template || "").replace("{goal}", goal || "(ask me)");
   const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => toast("Copied"));
-  const link = async () => {
-    setBusy(true);
-    try { await api.post("/api/claude/register"); toast("Linked to Claude Code"); await load(); }
-    catch (e: any) { toast(e.message, true); } finally { setBusy(false); }
+  const act = async (a: AgentInfo, what: "connect" | "disconnect") => {
+    setBusy(a.id);
+    try {
+      await api.post(`/api/claude/agents/${a.id}/${what}`);
+      toast(what === "connect" ? `${a.name} linked. ${a.restart}` : `${a.name} unlinked`);
+      await load();
+    } catch (e: any) { toast(e.message, true); } finally { setBusy(null); }
   };
+  const list = data ? [...data.agents].sort((x, y) => Number(y.installed) - Number(x.installed)) : [];
   return (
-    <Dialog open onClose={onClose} wide title="Connect Claude" footer={<button className="btn" onClick={onClose}>Close</button>}>
-      {!setup ? <Spinner /> : (
+    <Dialog open onClose={onClose} wide title="Connect an agent" footer={<button className="btn" onClick={onClose}>Close</button>}>
+      {!data ? <Spinner /> : (
         <div className="col" style={{ gap: 18 }}>
           <div>
-            <div className="lbl" style={{ marginBottom: 6 }}>1 · Link MakeAI to Claude Code (once)</div>
-            {setup.registered ? <div className="note ok">Linked. Claude Code has the MakeAI tools in every new session.</div>
-              : <div className="row"><span className="note warn" style={{ flex: 1 }}>{setup.cli ? "Not linked yet." : "Claude Code is not installed on this computer."}</span>
-                <button className="btn primary" disabled={busy || !setup.cli} onClick={link}>{busy ? <Spinner /> : "Link now"}</button></div>}
+            <div className="lbl" style={{ marginBottom: 8 }}>1 · Link MakeAI to your coding agent (once)</div>
+            <div className="agent-list">
+              {list.map((a) => (
+                <div key={a.id} className={`agent-row${a.installed ? "" : " off"}`}>
+                  <div className="agent-main">
+                    <span className="agent-name">{a.name}</span>
+                    <span className={`agent-state${a.configured ? " ok" : ""}`}>
+                      {a.configured ? (a.last_seen ? `Linked · last used ${new Date(a.last_seen * 1000).toLocaleString()}` : "Linked")
+                        : a.installed ? "Not linked" : "Not installed"}
+                    </span>
+                    <span className="sp" />
+                    <button className="btn ghost sm" onClick={() => setOpen(open === a.id ? null : a.id)}>{open === a.id ? "Hide" : "Manual"}</button>
+                    {a.configured
+                      ? <button className="btn sm" disabled={busy === a.id} onClick={() => act(a, "disconnect")}>Unlink</button>
+                      : <button className="btn primary sm" disabled={busy === a.id || !a.installed} onClick={() => act(a, "connect")}>
+                          {busy === a.id ? <Spinner /> : "Link"}</button>}
+                  </div>
+                  {open === a.id && (
+                    <div className="agent-manual small">
+                      {a.kind === "aider" ? "Aider has no MCP support - MakeAI gives it a conventions file with the commands instead:"
+                        : a.kind === "cli" ? "Run this once in a terminal:" : <>Add this to <span className="mono">{a.config_path}</span>:</>}
+                      <pre className="cm-pre" style={{ maxHeight: 180, overflow: "auto" }}>{a.snippet}</pre>
+                      <div className="row" style={{ gap: 8 }}>
+                        <button className="btn sm" onClick={() => copy(a.snippet)}>Copy</button>
+                        <span className="dim">{a.restart}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           <div>
-            <div className="lbl" style={{ marginBottom: 6 }}>2 · Open a new Claude Code chat and send this</div>
+            <div className="lbl" style={{ marginBottom: 6 }}>2 · Open a new chat in that agent and send this</div>
             <textarea className="in" rows={2} value={goal} onChange={(e) => setGoal(e.target.value)} aria-label="Goal" />
             <pre className="cm-pre" style={{ maxHeight: 200, overflow: "auto" }}>{prompt}</pre>
             <button className="btn primary" onClick={() => copy(prompt)}>Copy prompt</button>
           </div>
-          <div className="small dim">You talk to Claude in the Claude Code app. MakeAI only shows what Claude does.</div>
+          <div className="small dim">You talk to the agent in its own app. MakeAI only shows what it does.</div>
         </div>
       )}
     </Dialog>

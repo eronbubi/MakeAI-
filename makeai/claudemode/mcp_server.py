@@ -1,12 +1,13 @@
-"""MakeAI MCP server (stdio) - lets Claude work inside MakeAI in Claude Mode.
+"""MakeAI MCP server (stdio) - lets a coding agent (Claude Code, Codex, Cursor, ...) work inside MakeAI.
 
-Register once:
+Register once, e.g. for Claude Code:
     claude mcp add --scope user makeai -e MAKEAI_URL=http://127.0.0.1:7860 -- <python> <path>/mcp_server.py
+(MakeAI writes the matching config for the other agents, see ``agents.py``.)
 
 It speaks JSON-RPC 2.0 over stdin/stdout (Model Context Protocol) and only uses
 the standard library, so it starts instantly. Every tool calls the local MakeAI
-HTTP API with ``X-MakeAI-Agent: claude`` and records what it did in the Claude
-Mode activity feed, which the user watches in the MakeAI window. If MakeAI is
+HTTP API with ``X-MakeAI-Agent: <agent>`` and records what it did in the
+agent activity feed, which the user watches in the MakeAI window. If MakeAI is
 not running, the first tool call starts it.
 """
 from __future__ import annotations
@@ -27,7 +28,23 @@ BASE = os.environ.get("MAKEAI_URL", "http://127.0.0.1:7860").rstrip("/")
 ROOT = Path(__file__).resolve().parents[2]          # folder containing run.py
 SERVER_NAME = "makeai"
 VERSION = "1.0.0"
-SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
+SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+
+# which agent runs this server: MAKEAI_AGENT (set by the config MakeAI writes) or the MCP clientInfo name
+AGENTS = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor", "opencode": "OpenCode", "antigravity": "Antigravity",
+          "devin": "Devin", "windsurf": "Devin", "cline": "Cline", "aider": "Aider", "zed": "Zed", "kiro": "Kiro",
+          "junie": "Junie", "jetbrains": "Junie"}
+AGENT = {"id": "claude", "name": "Claude", "client": None}
+
+
+def identify(env_id: str | None, client: dict | None) -> dict:
+    cname = str((client or {}).get("name") or "")
+    for key in ([env_id] if env_id else []) + [cname.lower()]:
+        for k, name in AGENTS.items():
+            if key and k in key.lower():
+                aid = {"windsurf": "devin", "jetbrains": "junie"}.get(k, k)
+                return {"id": aid, "name": name, "client": cname or None}
+    return {"id": (env_id or cname or "agent").lower()[:32], "name": cname[:40] or "Agent", "client": cname or None}
 
 
 def log(*a):
@@ -41,7 +58,7 @@ class ApiError(Exception):
 
 def http(method: str, path: str, body=None, timeout: float = 120.0):
     data = None
-    headers = {"X-MakeAI-Client": "1", "X-MakeAI-Agent": "claude"}
+    headers = {"X-MakeAI-Client": "1", "X-MakeAI-Agent": AGENT["id"]}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -90,6 +107,17 @@ def event(kind: str, text: str, **kw):
         http("POST", "/api/claude/event", {"kind": kind, "text": text, **kw}, timeout=10)
     except Exception as e:
         log("event failed", e)
+
+
+def hello():
+    """Tell MakeAI (if it is running) which agent just loaded these tools - shown as 'connected' in the app."""
+    def go():
+        try:
+            http("POST", "/api/claude/hello", {"agent": AGENT}, timeout=2)
+        except Exception:
+            pass
+    import threading
+    threading.Thread(target=go, daemon=True).start()
 
 
 def focus(view: str, ref: str | None = None, title: str | None = None):
@@ -142,12 +170,12 @@ O = {"type": "object"}
 SA = {"type": "array", "items": {"type": "string"}}
 
 
-@tool("makeai_session_start", "Start a Claude Mode session. Starts MakeAI if needed, opens it in Claude Mode for the user, "
+@tool("makeai_session_start", "Start a session. Starts MakeAI if needed, opens its live view for the user, "
       "and returns an overview of hardware, datasets, AIs and runs. Call this first.",
       {"goal": {**S, "description": "What the user wants you to achieve"}, "open_window": {**B, "description": "open the MakeAI window (default true)"}})
 def t_session_start(goal: str = "", open_window: bool = True):
     how = ensure_running()
-    sess = http("POST", "/api/claude/session", {"action": "start", "goal": goal})
+    sess = http("POST", "/api/claude/session", {"action": "start", "goal": goal, "agent": AGENT})
     if open_window and not sess.get("ui_open"):      # the user already has MakeAI open -> don't open another tab
         try:
             webbrowser.open(BASE.replace("127.0.0.1", "localhost") + "/?claude=1")
@@ -160,15 +188,15 @@ def t_session_start(goal: str = "", open_window: bool = True):
           + (f", {round((hw.get('vram_total_mb') or 0) / 1024)} GB VRAM" if hw.get("vram_total_mb") else ""),
           tool="makeai_overview", status="ok", icon="chip")
     return {"makeai": how, "url": BASE, "overview": ov, "profile": profile(),
-            "note": "The user watches your actions in MakeAI's Claude Mode (view only) and talks to you here."}
+            "note": "The user watches your actions live in MakeAI (view only) and talks to you here."}
 
 
-@tool("makeai_session_end", "End the Claude Mode session with a short summary for the user.", {"summary": S})
+@tool("makeai_session_end", "End the session with a short summary for the user.", {"summary": S})
 def t_session_end(summary: str = ""):
     return http("POST", "/api/claude/session", {"action": "end", "summary": summary})
 
 
-@tool("makeai_say", "Add a short line to the Claude Mode activity list (e.g. 'Lowering the learning rate'). Keep it under 60 characters.",
+@tool("makeai_say", "Add a short line to the activity list the user watches in MakeAI (e.g. 'Lowering the learning rate'). Keep it under 60 characters.",
       {"text": S}, ["text"])
 def t_say(text: str):
     http("POST", "/api/claude/event", {"kind": "say", "text": text, "icon": "spark"})
@@ -185,7 +213,7 @@ def t_wait(timeout_s: float = 50):
     return r
 
 
-@tool("makeai_focus", "Show a page to the user in the Claude Mode viewer.",
+@tool("makeai_focus", "Show a page to the user in the MakeAI live view.",
       {"view": {**S, "enum": ["dashboard", "hardware", "models", "ai", "run", "dataset", "datasets", "training", "evaluate"]},
        "id": S, "title": S}, ["view"])
 def t_focus(view: str, id: str | None = None, title: str | None = None):
@@ -513,12 +541,14 @@ def handle(req: dict):
         return
     try:
         if method == "initialize":
+            AGENT.update(identify(os.environ.get("MAKEAI_AGENT"), params.get("clientInfo")))
+            hello()
             v = params.get("protocolVersion")
             result = {"protocolVersion": v if v in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0],
                       "capabilities": {"tools": {"listChanged": False}},
                       "serverInfo": {"name": SERVER_NAME, "version": VERSION},
                       "instructions": "Tools to work inside MakeAI (local AI training app). The user watches your "
-                                      "actions in MakeAI's Claude Mode (view only) and talks to you in this chat. "
+                                      "actions live in MakeAI (view only) and talks to you in this chat. "
                                       "Start with makeai_session_start; use makeai_wait while training runs."}
         elif method == "ping":
             result = {}
@@ -543,10 +573,63 @@ def handle(req: dict):
         send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32603, "message": str(e)}})
 
 
+def parse_value(v: str):
+    try:
+        return json.loads(v)
+    except json.JSONDecodeError:
+        return v
+
+
+def cli(argv: list[str]) -> int:
+    """Command-line use for agents without MCP (Aider):  mcp_server.py [--agent aider] call <tool> [k=v ...|JSON]"""
+    global BASE
+    agent = os.environ.get("MAKEAI_AGENT")
+    while argv and argv[0].startswith("--"):
+        flag, val = argv[0], argv[1] if len(argv) > 1 else ""
+        if flag == "--agent":
+            agent = val
+        elif flag == "--url":
+            BASE = val.rstrip("/")
+        argv = argv[2:]
+    AGENT.update(identify(agent or "cli", {"name": "command line"}))
+    if not argv or argv[0] not in ("call", "tools"):
+        print("usage: mcp_server.py [--agent NAME] [--url URL] call <tool> [key=value ...] | tools", file=sys.stderr)
+        return 2
+    if argv[0] == "tools":
+        for name, t in TOOLS.items():
+            props = t["schema"]["inputSchema"].get("properties") or {}
+            print(f"{name}({', '.join(props)}): {t['schema']['description']}")
+        return 0
+    if len(argv) < 2:
+        print("call needs a tool name", file=sys.stderr)
+        return 2
+    name, rest = argv[1], argv[2:]
+    args: dict = {}
+    for a in rest:
+        if a.lstrip().startswith("{"):
+            args.update(json.loads(a))
+        elif "=" in a:
+            k, v = a.split("=", 1)
+            args[k] = parse_value(v)
+        else:
+            print(f"cannot read argument {a!r} (use key=value)", file=sys.stderr)
+            return 2
+    try:
+        out = call_tool(name, args)
+    except (ApiError, TypeError, KeyError, urllib.error.URLError) as e:
+        print(json.dumps({"error": str(e)}, ensure_ascii=False))
+        return 1
+    print(json.dumps(out, ensure_ascii=False, indent=1, default=str)[:60000])
+    return 0
+
+
 def main():
     if hasattr(sys.stdin, "reconfigure"):
         sys.stdin.reconfigure(encoding="utf-8")
         sys.stdout.reconfigure(encoding="utf-8")
+    args = sys.argv[1:]
+    if args and (args[0] in ("call", "tools") or args[0].startswith("--")):
+        sys.exit(cli(args))
     log(f"makeai MCP server {VERSION} -> {BASE}")
     for line in sys.stdin:
         line = line.strip()

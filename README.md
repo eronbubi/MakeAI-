@@ -46,17 +46,27 @@ The UI is prebuilt into `makeai/web`. To change it: `cd ui && npm install && npm
 | Projects | `makeai/projects.py` | Folders for src, models, datasets, tokenizers, configs, evaluation, tests and docs, with an editor and links to AIs, datasets and runs. |
 | Dev agent (optional) | `makeai/devagent/` | Claude Code CLI: plan (read-only) → approve / edit / cancel → implement and test. Delete the folder and nothing else changes. |
 
-## Claude Mode
+## Claude Mode (coding agents)
 
-Click **ClaudeMode** in the top bar: MakeAI turns white/orange and shows, live and read-only, what Claude does in the app - the activity feed on the left, the page Claude works on (for example its training dashboard) on the right. You cannot edit anything there, but you can write to Claude; it receives your messages while it works.
+Click **ClaudeMode** in the top bar: MakeAI turns white/orange and shows, live and read-only, what your coding agent does in the app - the activity feed on the left, the page it works on (for example its training dashboard) on the right. You cannot type anything in MakeAI; you talk to the agent in its own app.
 
-Claude connects through a real MCP server (`makeai/claudemode/mcp_server.py`, standard library only). Link it to Claude Code once (Claude Mode → Connect Claude → *Link automatically*, or):
+Agents connect through one real MCP server (`makeai/claudemode/mcp_server.py`, standard library only). In Claude Mode → *How to connect* MakeAI lists the agents it found on the computer and links each one with one click (it writes the agent's own MCP config and keeps a `.makeai-backup` of the file it changed):
 
-```bash
-claude mcp add --scope user makeai -e MAKEAI_URL=http://127.0.0.1:7860 -- <path>\.venv\Scripts\python.exe <path>\makeai\claudemode\mcp_server.py
-```
+| Agent | Config MakeAI writes |
+|---|---|
+| Claude Code | `claude mcp add --scope user makeai ...` |
+| Codex (app, CLI, IDE) | `~/.codex/config.toml` via `codex mcp add` |
+| Cursor | `~/.cursor/mcp.json` |
+| OpenCode | `~/.config/opencode/opencode.json` via `opencode mcp add --global` |
+| Antigravity | `~/.gemini/config/mcp_config.json` (+ older `antigravity` folders) |
+| Devin (desktop / CLI) | `%APPDATA%\devin\mcp_config.json` - cloud Devin cannot reach your PC |
+| Cline | `~/.cline/data/settings/cline_mcp_settings.json` (+ editor globalStorage) |
+| Zed | `context_servers` in Zed's `settings.json` (comments are kept) |
+| Kiro | `~/.kiro/settings/mcp.json` |
+| Junie | `~/.junie/mcp/mcp.json` |
+| Aider | no MCP support: a conventions file added to `read:` in `~/.aider.conf.yml`; Aider runs the same tools with `mcp_server.py --agent aider call <tool> key=value` |
 
-Then either paste the prompt from *Connect Claude* into any Claude Code session (terminal, desktop app, IDE), or press **Start Claude** in Claude Mode, which runs your installed Claude Code headless with only the MakeAI tools (needs `claude auth login` once). Claude gets tools to inspect hardware and data, create AIs, train, pause/resume/kill, evaluate, chat and export - no delete tools. Claude Mode is optional: without it (or without Claude) MakeAI works exactly the same.
+Then paste the prompt from the dialog into a new chat in that agent. The agent gets tools to inspect hardware and data, create AIs, train, pause/resume/kill, evaluate, chat and export - no delete tools. MakeAI shows which agent is working and when each one last loaded the tools. Claude Mode is optional: without it (or without any agent) MakeAI works exactly the same.
 
 ## Tests
 

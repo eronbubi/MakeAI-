@@ -57,11 +57,11 @@ export default function App() {
   const [health, setHealth] = useState<any>(null);
   useEffect(() => { api.get("/api/health").then(setHealth).catch(() => setHealth(null)); }, []);
 
-  // Claude Mode: warm white/orange, watch-only view of what Claude does in MakeAI
+  // Claude Mode: warm white/orange, watch-only view of what the agent (Claude, Codex, Cursor, ...) does in MakeAI
   const [claudeMode, setClaudeMode] = useState<boolean>(() => {
     try { return new URLSearchParams(location.search).get("claude") === "1" || sessionStorage.getItem("makeai.claudeMode") === "1"; } catch { return false; }
   });
-  const [claude, setClaude] = useState<{ connected: boolean; active: boolean } | null>(null);
+  const [claude, setClaude] = useState<{ connected: boolean; active: boolean; agent: string } | null>(null);
   useEffect(() => {
     try { sessionStorage.setItem("makeai.claudeMode", claudeMode ? "1" : "0"); } catch { /* ignore */ }
     const root = document.documentElement;
@@ -73,7 +73,7 @@ export default function App() {
     if (!health?.claude_mode) return;
     let stop = false;
     const tick = async () => {
-      try { const s = await api.get("/api/claude/state?since=999999999"); if (!stop) setClaude({ connected: s.connected, active: !!s.session?.active }); } catch { /* ignore */ }
+      try { const s = await api.get("/api/claude/state?since=999999999"); if (!stop) setClaude({ connected: s.connected, active: !!s.session?.active, agent: s.agent?.name || "Claude" }); } catch { /* ignore */ }
       if (!stop) setTimeout(tick, 3000);
     };
     tick();
@@ -108,7 +108,7 @@ export default function App() {
   const runningJobs = jobs.filter((j) => j.state === "running").length;
   const claudeBtn = health?.claude_mode && (
     <button className={`claude-btn${claudeMode ? " on" : ""}`} onClick={() => setClaudeMode((c) => !c)} aria-pressed={claudeMode}
-      title={claude?.connected ? "Claude is connected" : "Claude is not connected"}>
+      title={claude?.connected ? `${claude.agent} is connected` : "No agent connected"}>
       <span className={`dot ${claude?.connected ? "run" : ""}`} />ClaudeMode
     </button>
   );
@@ -180,7 +180,7 @@ export default function App() {
         {!claudeMode && <button className="btn ghost sm" onClick={() => setLogsOpen(true)}>Activity log</button>}
         <span className="sp" />
         <span>@{settings.profile.username}</span>
-        <span>{claudeMode ? (claude?.connected ? "Claude connected" : "waiting for Claude") : "Runs locally · no cloud"}</span>
+        <span>{claudeMode ? (claude?.connected ? `${claude.agent} connected` : "waiting for an agent") : "Runs locally · no cloud"}</span>
       </footer>
       {!claudeMode && <Palette open={palette} onClose={() => setPalette(false)} go={go} />}
       <Dialog open={logsOpen} onClose={() => setLogsOpen(false)} title="Activity log" wide footer={<button className="btn" onClick={() => setLogsOpen(false)}>Close</button>}>
