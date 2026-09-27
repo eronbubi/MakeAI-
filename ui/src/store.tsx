@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, Job } from "./api";
 
-// ------------------------------------------------------------------ routing (tabs)
+// ------------------------------------------------------------------ routing (one page at a time + back)
 export type Route = { view: string; id?: string; title?: string };
 export const routeKey = (r: Route) => `${r.view}:${r.id ?? ""}`;
 
@@ -19,7 +19,8 @@ type LogLine = { t: number; src: string; text: string; level?: "err" | "ok" };
 type Toast = { id: number; text: string; err?: boolean };
 
 type Ctx = {
-  tabs: Route[]; active: string; open: (r: Route) => void; close: (key: string) => void;
+  route: Route; tabs: Route[]; active: string; open: (r: Route) => void; close: (key?: string) => void;
+  back: () => void; canBack: boolean;
   settings: any; setSettings: (s: any) => void; reloadSettings: () => Promise<void>;
   telemetry: Telemetry | null; history: Telemetry[]; activeRuns: any[];
   subscribe: (runId: string | null, since?: number) => void; runFeed: any; setRunFeedHandler: (fn: ((m: any) => void) | null) => void;
@@ -33,18 +34,17 @@ type Ctx = {
 const AppCtx = createContext<Ctx>(null as any);
 export const useApp = () => useContext(AppCtx);
 
-function loadTabs(): { tabs: Route[]; active: string } {
+function loadRoute(): Route {
   try {
-    const s = JSON.parse(localStorage.getItem("makeai.tabs") || "null");
-    if (s?.tabs?.length) return s;
+    const r = JSON.parse(localStorage.getItem("makeai.route") || "null");
+    if (r?.view) return r;
   } catch { /* storage unavailable */ }
-  return { tabs: [{ view: "dashboard", title: "Dashboard" }], active: "dashboard:" };
+  return { view: "dashboard", title: "Home" };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const init = useMemo(loadTabs, []);
-  const [tabs, setTabs] = useState<Route[]>(init.tabs);
-  const [active, setActive] = useState<string>(init.active);
+  const [route, setRoute] = useState<Route>(loadRoute);
+  const [stack, setStack] = useState<Route[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [history, setHistory] = useState<Telemetry[]>([]);
@@ -60,23 +60,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [runFeed, setRunFeed] = useState<any>(null);
 
   useEffect(() => {
-    try { localStorage.setItem("makeai.tabs", JSON.stringify({ tabs, active })); } catch { /* ignore */ }
-  }, [tabs, active]);
+    try { localStorage.setItem("makeai.route", JSON.stringify(route)); } catch { /* ignore */ }
+  }, [route]);
 
   const open = useCallback((r: Route) => {
-    const k = routeKey(r);
-    setTabs((t) => (t.some((x) => routeKey(x) === k) ? t.map((x) => (routeKey(x) === k ? { ...x, ...r } : x)) : [...t, r]));
-    setActive(k);
-  }, []);
-  const close = useCallback((k: string) => {
-    setTabs((t) => {
-      const i = t.findIndex((x) => routeKey(x) === k);
-      const next = t.filter((x) => routeKey(x) !== k);
-      if (!next.length) next.push({ view: "dashboard", title: "Dashboard" });
-      setActive((a) => (a === k ? routeKey(next[Math.max(0, i - 1)] || next[0]) : a));
-      return next;
+    setRoute((cur) => {
+      if (routeKey(cur) === routeKey(r)) return { ...cur, ...r };
+      setStack((st) => [...st.slice(-30), cur]);
+      return r;
     });
   }, []);
+  const back = useCallback(() => {
+    setStack((st) => {
+      const prev = st[st.length - 1] || { view: "dashboard", title: "Home" };
+      setRoute(prev);
+      return st.slice(0, -1);
+    });
+  }, []);
+  const close = useCallback((_k?: string) => back(), [back]);
 
   const log = useCallback((src: string, text: string, level?: "err" | "ok") => {
     setLogs((l) => [...l.slice(-800), { t: Date.now(), src, text, level }]);
@@ -98,7 +99,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const connect = () => {
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/live`);
       wsRef.current = ws;
-      ws.onopen = () => { if (subRef.current.id) ws.send(JSON.stringify({ subscribe: subRef.current.id, since: subRef.current.since })); };
+      let ping: number | undefined;
+      ws.onopen = () => {
+        ws.send(JSON.stringify(subRef.current.id ? { subscribe: subRef.current.id, since: subRef.current.since } : { ping: 1 }));
+        ping = window.setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ ping: 1 })); }, 5000);
+      };
       ws.onmessage = (ev) => {
         const m = JSON.parse(ev.data);
         if (m.telemetry) {
@@ -112,7 +117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setRunFeed(m.run);
         }
       };
-      ws.onclose = () => { if (!stop) timer = window.setTimeout(connect, 1500); };
+      ws.onclose = () => { clearInterval(ping); if (!stop) timer = window.setTimeout(connect, 1500); };
     };
     connect();
     return () => { stop = true; clearTimeout(timer); wsRef.current?.close(); };
@@ -147,7 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [log]);
 
   const value: Ctx = {
-    tabs, active, open, close, settings, setSettings, reloadSettings, telemetry, history, activeRuns, subscribe, runFeed,
+    route, tabs: [route], active: routeKey(route), open, close, back, canBack: stack.length > 0, settings, setSettings, reloadSettings, telemetry, history, activeRuns, subscribe, runFeed,
     setRunFeedHandler, logs, log, toast, toasts, jobs, track, bump, refresh: () => setBump((b) => b + 1), hw, setHw,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

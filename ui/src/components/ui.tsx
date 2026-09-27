@@ -34,6 +34,16 @@ const P: Record<string, string> = {
   file: "M4 1.5h5l3 3v10H4zM9 1.5v3h3",
   dir: "M2 4h4l1.5 1.5H14V13H2z",
   up: "M8 13V3M4 7l4-4 4 4",
+  left: "M10 3L5 8l5 5",
+  chip: "M4 4h8v8H4zM6 6h4v4H6zM6 2v2M10 2v2M6 12v2M10 12v2M2 6h2M2 10h2M12 6h2M12 10h2",
+  sliders: "M4 2v12M8 2v12M12 2v12M2.5 5h3M6.5 10h3M10.5 6h3",
+  eye: "M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  spark: "M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2",
+  done: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 0 0 8 1.8zM5.3 8.2l1.9 1.9 3.6-3.8",
+  chat: "M2.5 3h11v7.5H7L4 13v-2.5H2.5z",
+  box: "M2 5l6-3 6 3v6l-6 3-6-3zM2 5l6 3 6-3M8 8v6",
+  control: "M5 4v8M11 4v8",
+  lock: "M4.5 7V5a3.5 3.5 0 0 1 7 0v2M3.5 7h9v7h-9z",
 };
 export function Icon({ n, s = 16, c }: { n: string; s?: number; c?: string }) {
   return (
@@ -140,9 +150,9 @@ export function Bar({ v, color }: { v: number; color?: string }) {
 // ------------------------------------------------------------------ charts (own SVG)
 export type Series = { name: string; color: string; points: [number, number][]; dashed?: boolean };
 
-export function LineChart({ series, height = 180, yLabel, xFmt, yFmt, logY, yMin, yMax }: {
+export function LineChart({ series, height = 180, yLabel, xFmt, yFmt, logY, yMin, yMax, bare }: {
   series: Series[]; height?: number; yLabel?: string; xFmt?: (x: number) => string; yFmt?: (y: number) => string;
-  logY?: boolean; yMin?: number; yMax?: number;
+  logY?: boolean; yMin?: number; yMax?: number; bare?: boolean;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(600);
@@ -154,7 +164,7 @@ export function LineChart({ series, height = 180, yLabel, xFmt, yFmt, logY, yMin
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const pad = { l: 46, r: 10, t: 8, b: 20 };
+  const pad = bare ? { l: 6, r: 6, t: 8, b: 8 } : { l: 46, r: 10, t: 8, b: 20 };
   const all = series.flatMap((s) => s.points).filter((p) => p[1] != null && isFinite(p[1]) && (!logY || p[1] > 0));
   if (!all.length) return <div ref={wrap} className="empty" style={{ height }}>No data yet</div>;
   const tr = (y: number) => (logY ? Math.log10(y) : y);
@@ -176,20 +186,20 @@ export function LineChart({ series, height = 180, yLabel, xFmt, yFmt, logY, yMin
       <svg className="chart" width={W} height={H} role="img" aria-label={yLabel || "chart"}
         onMouseMove={(e) => { const r = (e.currentTarget as SVGElement).getBoundingClientRect(); const x = e.clientX - r.left; setHover(x >= pad.l && x <= W - pad.r ? x : null); }}
         onMouseLeave={() => setHover(null)}>
-        {yt.map((v, i) => (
+        {!bare && yt.map((v, i) => (
           <g key={i}>
             <line x1={pad.l} x2={W - pad.r} y1={sy(logY ? 10 ** v : v)} y2={sy(logY ? 10 ** v : v)} stroke="var(--line)" />
             <text x={pad.l - 6} y={sy(logY ? 10 ** v : v) + 3} textAnchor="end">{yf(logY ? 10 ** v : v)}</text>
           </g>
         ))}
-        {xt.map((v, i) => <text key={i} x={sx(v)} y={H - 5} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"}>{xFmt ? xFmt(v) : Math.round(v)}</text>)}
+        {!bare && xt.map((v, i) => <text key={i} x={sx(v)} y={H - 5} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"}>{xFmt ? xFmt(v) : Math.round(v)}</text>)}
         {series.map((s) => {
           const pts = s.points.filter((p) => p[1] != null && isFinite(p[1]) && (!logY || p[1] > 0));
           if (!pts.length) return null;
           const d = pts.map((p, i) => `${i ? "L" : "M"}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join("");
           return <g key={s.name}>
-            <path d={d} fill="none" stroke={s.color} strokeWidth={1.6} strokeDasharray={s.dashed ? "4 3" : undefined} />
-            {pts.length < 40 && pts.map((p, i) => <circle key={i} cx={sx(p[0])} cy={sy(p[1])} r={2.2} fill={s.color} />)}
+            <path d={d} fill="none" stroke={s.color} strokeWidth={bare ? 3 : 1.8} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={s.dashed ? "4 3" : undefined} />
+            {!bare && pts.length < 40 && pts.map((p, i) => <circle key={i} cx={sx(p[0])} cy={sy(p[1])} r={2.2} fill={s.color} />)}
           </g>;
         })}
         {hx != null && <line x1={hover!} x2={hover!} y1={pad.t} y2={H - pad.b} stroke="var(--line2)" />}

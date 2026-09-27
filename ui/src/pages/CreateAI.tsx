@@ -195,7 +195,7 @@ export default function CreateAI({ route }: { route: Route }) {
           {step === 2 && (
             <>
               <div className="card">
-                <h3>Complexity<span className="r"><Seg value={mode} onChange={(v) => setMode(v)} options={[{ value: "auto", label: "AUTO" }, { value: "custom", label: "CUSTOM" }]} /></span></h3>
+                <h3>How capable should it be?</h3>
                 <div className="cx">
                   {Object.entries(opts.data?.complexity || {}).map(([k, v]: any) => (
                     <button key={k} className={complexity === Number(k) ? "on" : ""} onClick={() => setComplexity(Number(k))} aria-pressed={complexity === Number(k)}>
@@ -205,9 +205,20 @@ export default function CreateAI({ route }: { route: Route }) {
                 </div>
                 <div className="dim small" style={{ marginTop: 8 }}>Complexity sets the recommended model size, architecture, context, data requirement, steps, batch and duration - capped by your hardware and dataset.</div>
               </div>
-              {model && (
+              {model && mode === "auto" && (
                 <div className="card">
-                  <h3>Architecture{!scratch && <span className="r">from base model (fixed)</span>}</h3>
+                  <h3>Recommended model<span className="r"><button className="btn sm" onClick={() => setMode("custom")}>Customize</button></span></h3>
+                  <div className="grid g3">
+                    <div className="stat"><span className="k">Size</span><span className="v">{fmt.params(estimate?.params ?? rec?.estimates?.params)}</span></div>
+                    <div className="stat"><span className="k">Layers × width</span><span className="v">{model.n_layers} × {model.hidden_size}</span></div>
+                    <div className="stat"><span className="k">Context</span><span className="v">{fmt.int(model.context_length)}</span></div>
+                  </div>
+                  <div className="dim small" style={{ marginTop: 12 }}>{scratch ? "Chosen for your GPU and your data. You can change every value with Customize." : "Uses the base model's architecture."}</div>
+                </div>
+              )}
+              {model && mode === "custom" && (
+                <div className="card">
+                  <h3>Architecture{!scratch ? <span className="r">from base model (fixed)</span> : <span className="r"><button className="btn sm ghost" onClick={() => setMode("auto")}>Back to automatic</button></span>}</h3>
                   <div className="grid g4">
                     <Field label="Layers"><Num value={model.n_layers} onChange={(v) => setM("n_layers", v)} min={1} disabled={!scratch} /></Field>
                     <Field label="Hidden size"><Num value={model.hidden_size} onChange={(v) => setM("hidden_size", v)} min={8} disabled={!scratch} /></Field>
@@ -263,6 +274,7 @@ export default function CreateAI({ route }: { route: Route }) {
                   })}
                 </tbody></table>
               </div>
+              <details className="more" style={{ marginTop: 4 }}><summary>More data options</summary><div>
               <div className="card">
                 <h3>Preparation</h3>
                 <div className="grid g4">
@@ -273,6 +285,7 @@ export default function CreateAI({ route }: { route: Route }) {
                 </div>
                 <div className="dim small" style={{ marginTop: 6 }}>Chat datasets train only on assistant replies (prompts are masked from the loss).</div>
               </div>
+              </div></details>
               {scratch && (
                 <div className="card">
                   <h3>Tokenizer<span className="r"><Seg value={tokMode} onChange={setTokMode} options={[{ value: "new", label: "Train new" }, { value: "existing", label: "Use existing" }]} /></span></h3>
@@ -292,7 +305,22 @@ export default function CreateAI({ route }: { route: Route }) {
             </>
           )}
 
-          {step === 4 && training && (
+          {step === 4 && training && mode === "auto" && (
+            <div className="card">
+              <h3>Training plan<span className="r"><button className="btn sm" onClick={() => setMode("custom")}>Customize</button></span></h3>
+              {rec?.notes?.map((n: string) => <div key={n} className="note warn" style={{ marginBottom: 10 }}>{n}</div>)}
+              <div className="grid g3" style={{ rowGap: 20 }}>
+                <div className="stat"><span className="k">Training steps</span><span className="v">{fmt.int(training.max_steps)}</span></div>
+                <div className="stat"><span className="k">Batch</span><span className="v">{training.micro_batch_size * training.gradient_accumulation}</span></div>
+                <div className="stat"><span className="k">Learning rate</span><span className="v">{training.learning_rate}</span></div>
+                <div className="stat"><span className="k">Precision</span><span className="v">{String(training.precision).toUpperCase()}</span></div>
+                <div className="stat"><span className="k">Memory</span><span className="v">{fmt.bytes(estimate?.memory?.total ?? rec?.estimates?.vram_bytes)}</span></div>
+                <div className="stat"><span className="k">Time (est.)</span><span className="v">{fmt.dur(rec?.estimates?.duration_s)}</span></div>
+              </div>
+              <div className="dim small" style={{ marginTop: 14 }}>Chosen automatically for your hardware. Checkpoints are saved regularly and when you pause or stop.</div>
+            </div>
+          )}
+          {step === 4 && training && mode === "custom" && (
             <>
               <div className="card">
                 <h3>Automatic hardware optimization<span className="r"><Seg value={mode} onChange={setMode} options={[{ value: "auto", label: "AUTO" }, { value: "custom", label: "CUSTOM" }]} /></span></h3>

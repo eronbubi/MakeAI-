@@ -17,6 +17,8 @@ python -m venv .venv
 .venv\Scripts\python run.py
 ```
 
+**Desktop app (Windows):** `.venv\Scripts\python -m makeai.desktop` puts a MakeAI icon on the desktop. Double-click it and MakeAI starts without a console in its own app window (Chrome/Edge `--app`); closing the window stops MakeAI unless a training run is still going. A second double-click only opens another window. Output goes to `~/MakeAI/makeai.log`.
+
 MakeAI opens at `http://127.0.0.1:7860`. Data lives in `~/MakeAI` (change with `--home DIR` or `MAKEAI_HOME`). `--host 0.0.0.0` lets other computers open shared AI pages; everything except the public share pages stays local-only. Optional: `pip install llama-cpp-python` to run imported GGUF files.
 
 The UI is prebuilt into `makeai/web`. To change it: `cd ui && npm install && npm run build` (or `npm run dev` for hot reload against a running server).
@@ -39,6 +41,18 @@ The UI is prebuilt into `makeai/web`. To change it: `cd ui && npm install && npm
 | Sharing / Discover | `makeai/sharing.py` | Private, link or public visibility; public pages; package downloads with counts; Discover merges this instance with other MakeAI hubs you add. |
 | Projects | `makeai/projects.py` | Folders for src, models, datasets, tokenizers, configs, evaluation, tests and docs, with an editor and links to AIs, datasets and runs. |
 | Dev agent (optional) | `makeai/devagent/` | Claude Code CLI: plan (read-only) → approve / edit / cancel → implement and test. Delete the folder and nothing else changes. |
+
+## Claude Mode
+
+Click **ClaudeMode** in the top bar: MakeAI turns white/orange and shows, live and read-only, what Claude does in the app - the activity feed on the left, the page Claude works on (for example its training dashboard) on the right. You cannot edit anything there, but you can write to Claude; it receives your messages while it works.
+
+Claude connects through a real MCP server (`makeai/claudemode/mcp_server.py`, standard library only). Link it to Claude Code once (Claude Mode → Connect Claude → *Link automatically*, or):
+
+```bash
+claude mcp add --scope user makeai -e MAKEAI_URL=http://127.0.0.1:7860 -- <path>\.venv\Scripts\python.exe <path>\makeai\claudemode\mcp_server.py
+```
+
+Then either paste the prompt from *Connect Claude* into any Claude Code session (terminal, desktop app, IDE), or press **Start Claude** in Claude Mode, which runs your installed Claude Code headless with only the MakeAI tools (needs `claude auth login` once). Claude gets tools to inspect hardware and data, create AIs, train, pause/resume/kill, evaluate, chat and export - no delete tools. Claude Mode is optional: without it (or without Claude) MakeAI works exactly the same.
 
 ## Tests
 

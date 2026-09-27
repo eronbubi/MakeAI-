@@ -79,13 +79,13 @@ def test_runtime_never_imports_claude():
     """Static check: only makeai/devagent may reference Claude; the server imports it guardedly."""
     offenders = []
     for py in (ROOT / "makeai").rglob("*.py"):
-        if "devagent" in py.parts:
+        if "devagent" in py.parts or "claudemode" in py.parts:     # optional Claude integrations
             continue
         tree = ast.parse(py.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 names = [a.name for a in node.names] + [getattr(node, "module", "") or ""]
-                if any(n and ("anthropic" in n or "claude" in n.lower()) for n in names):
+                if any(n and ("anthropic" in n or ("claude" in n.lower() and n not in ("claudemode",))) for n in names):
                     offenders.append(str(py))
     assert not offenders
 
@@ -95,6 +95,7 @@ def test_standalone_without_claude(tmp_path, trained):
     script = f"""
 import os, sys, shutil, json, time
 sys.modules['makeai.devagent'] = None            # the agent package is gone
+sys.modules['makeai.claudemode'] = None          # and so is Claude Mode
 os.environ['PATH'] = ''                          # no claude CLI anywhere
 os.environ['MAKEAI_HOME'] = {str(tmp_path)!r}
 sys.path.insert(0, {str(ROOT)!r})

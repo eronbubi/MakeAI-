@@ -40,6 +40,11 @@ try:  # optional development agent - the runtime works without it
 except Exception:  # pragma: no cover
     devagent = None
 
+try:  # optional Claude Mode link - the runtime works without it
+    from .. import claudemode
+except Exception:  # pragma: no cover
+    claudemode = None
+
 WEB_DIST = Path(__file__).resolve().parents[1] / "web"
 PUBLIC_PREFIXES = ("/s/", "/ai/", "/api/public/", "/favicon", "/assets/share")
 MUTATING = ("POST", "PUT", "PATCH", "DELETE")
@@ -55,6 +60,7 @@ class State:
         self.hw: dict[str, Any] | None = None
         self.hw_at = 0.0
         self.last_auto_opt: dict[str, float] = {}
+        self.ui_seen = 0.0             # last time an open MakeAI window received live data (heartbeat)
 
     def hardware(self, refresh: bool = False) -> dict[str, Any]:
         if self.hw is None or refresh or time.time() - self.hw_at > 300:
@@ -88,7 +94,7 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def api_health():
         return {"product": PRODUCT, "vendor": VENDOR, "version": __version__, "home": str(store.home()),
-                "dev_agent": devagent is not None}
+                "dev_agent": devagent is not None, "claude_mode": claudemode is not None, "ui_open": time.time() - S.ui_seen < 15}
 
     @app.get("/api/settings")
     def get_settings():
@@ -868,6 +874,7 @@ def create_app() -> FastAPI:
             while True:
                 try:
                     msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
+                    S.ui_seen = time.time()      # the window is alive only if it talks to us (pings every 5 s)
                     if "subscribe" in msg:
                         subscribed = msg["subscribe"]
                         offset = int(msg.get("since", 0))
@@ -911,6 +918,10 @@ def create_app() -> FastAPI:
                 cfg["training"]["dataloader_workers"] = new
                 store.write_json(run_dir(run_id) / "run.json", cfg)
                 S.last_auto_opt[run_id] = time.time()
+
+    # ------------------------------------------------------------ Claude Mode (optional)
+    if claudemode is not None:
+        claudemode.install(app, S, list_runs, read_status)
 
     # ------------------------------------------------------------ UI
     @app.get("/favicon.svg")
