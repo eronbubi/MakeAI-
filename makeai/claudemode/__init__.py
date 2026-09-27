@@ -28,6 +28,14 @@ from fastapi import Body, HTTPException, Request
 from .. import store
 
 MCP_SCRIPT = Path(__file__).resolve().parent / "mcp_server.py"
+
+
+def console_python() -> str:
+    """The MCP server talks over stdin/stdout, so it must run with python.exe, not pythonw.exe."""
+    exe = Path(sys.executable)
+    if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").exists():
+        return str(exe.with_name("python.exe"))
+    return str(exe)
 CONNECTED_WINDOW_S = 90          # Claude counts as connected if it called within this window
 
 PROMPT_TEMPLATE = """Work inside MakeAI for me using the "makeai" tools. I watch what you do live in MakeAI's Claude Mode.
@@ -199,7 +207,7 @@ def claude_cli() -> str | None:
 
 def setup_info(base_url: str) -> dict[str, Any]:
     cmd = ["claude", "mcp", "add", "--scope", "user", "makeai", "-e", f"MAKEAI_URL={base_url}", "--",
-           sys.executable, str(MCP_SCRIPT)]
+           console_python(), str(MCP_SCRIPT)]
     registered = None
     cli = claude_cli()
     if cli:
@@ -222,7 +230,7 @@ def register(base_url: str) -> dict[str, Any]:
     subprocess.run([cli, "mcp", "remove", "--scope", "user", "makeai"], capture_output=True, text=True, timeout=60,
                    creationflags=flags)
     p = subprocess.run([cli, "mcp", "add", "--scope", "user", "makeai", "-e", f"MAKEAI_URL={base_url}", "--",
-                        sys.executable, str(MCP_SCRIPT)], capture_output=True, text=True, timeout=60,
+                        console_python(), str(MCP_SCRIPT)], capture_output=True, text=True, timeout=60,
                        encoding="utf-8", errors="replace", creationflags=flags)
     if p.returncode != 0:
         raise RuntimeError((p.stderr or p.stdout).strip()[-500:])

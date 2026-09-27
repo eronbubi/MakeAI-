@@ -8,7 +8,11 @@ OPEN MAKEAI → HARDWARE SCAN → DASHBOARD → CREATE AI → NAME + CREATOR →
 → PAUSE / RESUME / KILL → EVALUATION → MY AIs → RUN → CHAT → SHARE / EXPORT
 ```
 
-## Start
+## Install (Windows)
+
+Download **MakeAI-Setup.exe** from the [latest release](https://github.com/eronbubi/MakeAI-/releases/latest) and run it. Setup installs Python 3.10 and PyTorch (CUDA build when an NVIDIA GPU is present) into its own folder, adds MakeAI to the desktop and Start menu, and starts it. Build the installer yourself with `python installer/build.py`.
+
+## Start (from source)
 
 ```bash
 python -m venv .venv
