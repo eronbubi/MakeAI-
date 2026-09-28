@@ -1,5 +1,9 @@
 **MakeAI by Convergent** — create, train and run your own AI models on your own computer. No cloud, no account.
 
+### New in 1.1
+
+- **Claude Mode works with 11 coding agents:** Claude Code, Codex, Cursor, OpenCode, Antigravity, Devin (desktop/CLI), Cline, Aider, Zed, Kiro and Junie. *Claude Mode → How to connect* lists the agents found on your PC and links each one with one click (a backup of every changed config file is kept). MakeAI shows which agent is working.
+
 ### Download & install (Windows 10/11, 64-bit)
 
 1. Download **MakeAI-Setup.exe** below and run it.
@@ -16,7 +20,7 @@ Windows may show "Windows protected your PC" because the installer is not code-s
 - Create AIs from scratch or fine-tune (full, LoRA, QLoRA, adapters), datasets and tokenizers
 - Live training view with loss curve, performance score, pause/resume and a Kill Switch that saves a safe checkpoint
 - Chat with your AIs locally; import/export safetensors, GGUF, ONNX, PyTorch and MakeAI packages; creator attribution that survives every export
-- **Claude Mode** (optional): link MakeAI to Claude Code and watch Claude create and train AIs for you
+- **Claude Mode** (optional): link MakeAI to your coding agent and watch it create and train AIs for you
 
 Your AIs and data are stored in `%USERPROFILE%\MakeAI` and are kept when you update or uninstall ("Uninstall MakeAI.cmd" in the install folder).
 

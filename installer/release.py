@@ -58,4 +58,4 @@ def main(tag: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "v1.0.0")
+    main(sys.argv[1] if len(sys.argv) > 1 else "v1.1.0")

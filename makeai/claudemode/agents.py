@@ -622,7 +622,7 @@ class Zed(Agent):
     id, name = "zed", "Zed"
     keys = ["context_servers", NAME]
     docs = "https://zed.dev/docs/ai/mcp"
-    restart = "Zed picks it up right away (Agent Panel → Settings shows the server)."
+    restart = "Zed starts the tools as soon as a project is open (Agent Panel → Settings shows the server)."
 
     def paths(self):
         if os.name == "nt":

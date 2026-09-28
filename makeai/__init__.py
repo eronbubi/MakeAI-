@@ -5,6 +5,6 @@ The optional development agent lives in ``makeai.devagent`` and may be deleted
 without affecting anything else.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 PRODUCT = "MakeAI"
 VENDOR = "Convergent"

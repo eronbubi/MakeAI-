@@ -27,7 +27,7 @@ from pathlib import Path
 BASE = os.environ.get("MAKEAI_URL", "http://127.0.0.1:7860").rstrip("/")
 ROOT = Path(__file__).resolve().parents[2]          # folder containing run.py
 SERVER_NAME = "makeai"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
 # which agent runs this server: MAKEAI_AGENT (set by the config MakeAI writes) or the MCP clientInfo name
